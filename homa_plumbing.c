@@ -53,6 +53,12 @@ static struct task_struct *timer_kthread;
  */
 static int log_topic;
 
+/*
+ * This is mandatory, or proto_register fails
+ */
+DEFINE_PER_CPU(int, homa_memory_per_cpu_fw_alloc);
+EXPORT_PER_CPU_SYMBOL_GPL(homa_memory_per_cpu_fw_alloc);
+
 /* This structure defines functions that handle various operations on
  * Homa sockets. These functions are relatively generic: they are called
  * to implement top-level system calls. Many of these operations can
@@ -135,6 +141,7 @@ struct proto homa_prot = {
 	.sysctl_rmem	   = &sysctl_homa_rmem_min,
 	.obj_size	   = sizeof(struct homa_sock),
 	.diag_destroy	   = homa_diag_destroy,
+	.per_cpu_fw_alloc  = &homa_memory_per_cpu_fw_alloc,
 };
 
 struct proto homav6_prot = {
@@ -167,6 +174,7 @@ struct proto homav6_prot = {
 	 */
 	.obj_size	   = sizeof(struct homa_sock) + sizeof(struct ipv6_pinfo),
 	.diag_destroy	   = homa_diag_destroy,
+	.per_cpu_fw_alloc  = &homa_memory_per_cpu_fw_alloc,
 };
 
 /* Top-level structure describing the Homa protocol. */
@@ -1189,7 +1197,7 @@ int homa_sendmsg(struct sock *sk, struct msghdr *msg, size_t len) {
  * Return:       0 on success, otherwise a negative errno.
  */
 int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
-		 int nonblocking, int flags, int *addr_len) {
+		 int flags, int *addr_len) {
 	/* Homa doesn't support the usual read-write kernel calls; must
 	 * invoke operations through ioctls in order to manipulate RPC ids.
 	 */

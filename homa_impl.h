@@ -2858,7 +2858,7 @@ extern void     homa_prios_changed(struct homa *homa);
 extern int      homa_proc_read_metrics(char *buffer, char **start, off_t offset,
                     int count, int *eof, void *data);
 extern int      homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
-                    int noblock, int flags, int *addr_len);
+                    int flags, int *addr_len);
 extern int      homa_register_interests(struct homa_interest *interest,
                     struct homa_sock *hsk, int flags, __u64 id,
 		    const sockaddr_in_union *client_addr);
@@ -2936,6 +2936,11 @@ extern void     homa_xmit_data(struct homa_rpc *rpc, bool force);
 extern void     __homa_xmit_data(struct sk_buff *skb, struct homa_rpc *rpc,
                     int priority);
 extern void     homa_xmit_unknown(struct sk_buff *skb, struct homa_sock *hsk);
+
+/*
+ * Need this to satisfy proto_register
+ */
+DECLARE_PER_CPU(int, homa_memory_per_cpu_fw_alloc);
 
 /**
  * homa_check_pacer() - This method is invoked at various places in Homa to
