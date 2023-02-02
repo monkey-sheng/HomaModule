@@ -1,0 +1,1 @@
+gcc -luring udp_send.c -o udpsend.o

@@ -16,5 +16,6 @@
 # Ignore IDE files
 /.idea/
 /nbproject/
+/.vscode
 
 reports/
