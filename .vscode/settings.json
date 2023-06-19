@@ -1,0 +1,28 @@
+{
+    "files.associations": {
+        "homa_lcache.h": "c",
+        "homa_impl.h": "c",
+        "wordsize.h": "c",
+        "protocol.h": "c",
+        "gro.h": "c",
+        "ip.h": "c",
+        "array": "c",
+        "chrono": "c",
+        "functional": "c",
+        "istream": "c",
+        "ostream": "c",
+        "ratio": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "algorithm": "cpp",
+        "condition_variable": "c",
+        "*.tcc": "c",
+        "fstream": "c",
+        "mutex": "c",
+        "audit.h": "c",
+        "icmp.h": "c",
+        "errqueue.h": "c",
+        "types.h": "c"
+    }
+}
