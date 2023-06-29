@@ -196,7 +196,8 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit)
 		 */
 		do {
 			int seg_size;
-			seg = (struct data_segment *) skb_put(skb, sizeof(*seg));
+			size_t ret;
+			seg = (struct data_segment *)skb_put(skb, sizeof(*seg));
 			seg->offset = htonl(rpc->msgout.length - bytes_left);
 			if (bytes_left <= max_pkt_data)
 				seg_size = bytes_left;
@@ -205,8 +206,12 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit)
 			seg->segment_length = htonl(seg_size);
 			seg->ack.client_id = 0;
 			homa_peer_get_acks(rpc->peer, 1, &seg->ack);
-			if (copy_from_iter(skb_put(skb, seg_size), seg_size,
-					iter) != seg_size) {
+			// TODO: this is meant for user space
+			ret = copy_from_iter(skb_put(skb, seg_size), seg_size,
+										iter);
+			if (ret != seg_size)
+			{
+				pr_err("copy_from_iter failed: %ld\n", ret);
 				err = -EFAULT;
 				kfree_skb(skb);
 				homa_rpc_lock(rpc);

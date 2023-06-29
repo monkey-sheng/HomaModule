@@ -23,6 +23,7 @@
         "audit.h": "c",
         "icmp.h": "c",
         "errqueue.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "memory": "c"
     }
 }

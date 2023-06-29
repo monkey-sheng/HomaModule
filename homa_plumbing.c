@@ -27,6 +27,17 @@ MODULE_AUTHOR("John Ousterhout");
 MODULE_DESCRIPTION("Homa transport protocol");
 MODULE_VERSION("0.01");
 
+/* Export symbols for use in nvme-over-homa */
+
+EXPORT_SYMBOL(homa_bind);
+EXPORT_SYMBOL(homa_shutdown);
+// EXPORT_SYMBOL(homa_abort);
+EXPORT_SYMBOL(homa_socket);
+EXPORT_SYMBOL(homa_setsockopt);
+EXPORT_SYMBOL(homa_sendmsg);
+EXPORT_SYMBOL(homa_recvmsg);
+
+
 /* Not yet sure what these variables are for */
 long sysctl_homa_mem[3] __read_mostly;
 int sysctl_homa_rmem_min __read_mostly;
@@ -803,13 +814,21 @@ int homa_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
 		return -EINVAL;
 
 	if (copy_from_sockptr(&args, optval, optlen))
+	{
+		pr_warn("%s\n", "HOMA MODULE copy_from_sockptr returned EFAULT");
 		return -EFAULT;
+	}
+		
 
 	/* Do a trivial test to make sure we can at least write the first
 	 * page of the region.
 	 */
-	if (copy_to_user(args.start, &args, sizeof(args)))
+	/* if (copy_to_user(args.start, &args, sizeof(args)))  // this won't work in kernel, get rid of this.
+	{
+		pr_warn("%s\n", "HOMA MODULE copy_to_user returned EFAULT");
 		return -EFAULT;
+	} */
+		
 
 	homa_sock_lock(hsk, "homa_setsockopt SO_HOMA_SET_BUF");
 	ret = homa_pool_init(&hsk->buffer_pool, hsk->homa, args.start,
@@ -855,12 +874,13 @@ int homa_sendmsg(struct sock *sk, struct msghdr *msg, size_t length) {
 	struct homa_rpc *rpc = NULL;
 	sockaddr_in_union *addr = (sockaddr_in_union *) msg->msg_name;
 
-	if (unlikely(!msg->msg_control_is_user)) {
+	// we are in kernel, this doesn't apply
+	/* if (unlikely(!msg->msg_control_is_user)) {
 		result = -EINVAL;
 		goto error;
-	}
-	if (unlikely(copy_from_user(&args, msg->msg_control,
-			sizeof(args)))) {
+	} */
+	if (memcpy(&args, msg->msg_control,
+			sizeof(args)) == 0) {
 		result = -EFAULT;
 		goto error;
 	}
@@ -894,14 +914,17 @@ int homa_sendmsg(struct sock *sk, struct msghdr *msg, size_t length) {
 		}
 		rpc->completion_cookie = args.completion_cookie;
 		result = homa_message_out_init(rpc, &msg->msg_iter, 1);
-		if (result)
+		if (result){
+			pr_err("homa_message_out_init: %d\n", result);
 			goto error;
+		}
+			
 		args.id = rpc->id;
 		homa_rpc_unlock(rpc);
 		rpc = NULL;
 
-		if (unlikely(copy_to_user(msg->msg_control, &args,
-				sizeof(args)))) {
+		if (memcpy(msg->msg_control, &args,
+				sizeof(args)) == 0) {
 			rpc = homa_find_client_rpc(hsk, args.id);
 			result = -EFAULT;
 			goto error;
@@ -981,6 +1004,8 @@ int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	__u64 finish;
 	int result;
 
+	bool miu = msg->msg_control_is_user;
+	pr_notice("homa_recvmsg() getting called, is user: %d\n", miu);
 	INC_METRIC(recv_calls, 1);
 	if (unlikely(!msg->msg_control)) {
 		/* This test isn't strictly necessary, but it provides a
@@ -989,16 +1014,26 @@ int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 		return -EINVAL;
 	}
 	if (msg->msg_controllen != sizeof(control)) {
+		pr_err("%s\n", "msg->msg_controllen != sizeof(control)");
 		result = -EINVAL;
 		goto done;
 	}
-	if (unlikely(copy_from_user(&control, msg->msg_control,
-			sizeof(control)))) {
+	if (unlikely(memcpy(&control, msg->msg_control,
+			sizeof(control)) == 0)) {
+		pr_err("%s\n", "HOMA_recvmsg memcpy failed!");
 		result = -EFAULT;
 		goto done;
 	}
+	else
+	{
+		pr_info("%s\n", "HOMA_recvmsg memcpy success");
+	}
+
 	control.completion_cookie = 0;
 	if (control._pad[0] || control._pad[1]) {
+		pr_err("%s\n", "padding messed up, what happened?");
+		pr_info("%d, %d\n", control._pad[0], control._pad[1]);
+		pr_info("flags: %u, cookie: %lld, id: %lld, num_bpages: %d\n", control.flags, control.completion_cookie, control.id, control.num_bpages);
 		result = -EINVAL;
 		goto done;
 	}
@@ -1007,13 +1042,17 @@ int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 
 	if ((control.num_bpages > HOMA_MAX_BPAGES)
 			|| (control.flags & ~HOMA_RECVMSG_VALID_FLAGS)) {
+		pr_err("%s\n", "control.num_bpages > HOMA_MAX_BPAGES");
 		result = -EINVAL;
 		goto done;
 	}
+	pr_info("homa_pool_release_buffers start\n");
 	homa_pool_release_buffers(&hsk->buffer_pool, control.num_bpages,
 			control.bpage_offsets);
+	pr_info("homa_pool_release_buffers end\n");
 	control.num_bpages = 0;
 
+	pr_info("homa_wait_for_message start\n");
 	rpc = homa_wait_for_message(hsk, nonblocking
 			? (control.flags | HOMA_RECVMSG_NONBLOCKING)
 			: control.flags, control.id);
@@ -1023,9 +1062,11 @@ int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 		 * the RPC itself we won't get here.
 		 */
 		result = PTR_ERR(rpc);
+		pr_err("HOMA rpc pointer error: %d\n", result);  // interrupted system call gives ERROR NO.: -4
 		goto done;
 	}
 	result = rpc->error ? rpc->error : rpc->msgin.total_length;
+	pr_notice("HOMA rpc->error: %d\n", rpc->error);
 
 	/* Generate time traces on both ends for long elapsed times (used
 	 * for performance debugging).
@@ -1088,10 +1129,13 @@ int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	homa_rpc_unlock(rpc);
 
 done:
-	if (unlikely(copy_to_user(msg->msg_control, &control, sizeof(control)))) {
+	if (unlikely(memcpy(msg->msg_control, &control, sizeof(control)) == 0)) {
 		/* Note: in this case the message's buffers will be leaked. */
 		printk(KERN_NOTICE "homa_recvmsg couldn't copy back args\n");
 		result = -EFAULT;
+	}
+	else {
+		pr_notice("%s\n", "homa recvmsg copy back args success");
 	}
 
 	/* This is needed to compensate for ____sys_recvmsg (which writes the
@@ -1099,8 +1143,11 @@ done:
 	 * the user's struct msghdr) so that the value in the user's struct
 	 * doesn't change.
 	 */
-	msg->msg_control = ((char *) msg->msg_control)
-			+ sizeof(struct homa_recvmsg_args);
+	// TODO: within kernel ____sys_recvmsg doesn't get called by sock_recvmsg(), we don't need this, just remove?
+	pr_notice("before compensation, msg->msg_control: %p\n", msg->msg_control);
+	msg->msg_control = ((char *)msg->msg_control) + sizeof(struct homa_recvmsg_args);
+	pr_notice("after compensation, msg->msg_control: %p\n", msg->msg_control);
+	pr_notice("____sys_recvmsg compensation still ran\n");
 
 	finish = get_cycles();
 	tt_record3("homa_recvmsg returning id %d, length %d, bpage0 %d",

@@ -203,13 +203,26 @@ copy_out:
 			} else
 				i++;
 			BUG_ON(skb_bytes <= 0);
-			error = import_single_range(READ, dst, skb_bytes, &iov,
-					&iter);
+
+			// TODO: does import_single_range really fail?
+			/* error = import_single_range(READ, dst, skb_bytes, &iov,
+					&iter); */  // this is meant for user space. TODO: find the secure/right way to do this?
+
+			/* iov.iov_base = dst;
+			iov.iov_len = skb_bytes;
+			iov_iter_init(&iter, READ, &iov, 1, skb_bytes);
+			pr_notice("HOMA called iov_iter_init() instead of import_single_range()\n"); */
+
+			pr_notice("skb_copy_bits() start\n");
+			error = skb_copy_bits(skb, sizeof(*h) + data_offset, dst, skb_bytes); // TODO
+			pr_notice("skb_copy_bits: %d\n", error);
+
 			if (error)
 				break;
-			error = skb_copy_datagram_iter(skb,
+			/* error = skb_copy_datagram_iter(skb,
 					sizeof(*h) + data_offset, &iter,
 					skb_bytes);
+			pr_notice("skb_copy_datagram_iter: %d\n", error); */
 			rpc_offset += skb_bytes;
 			count += skb_bytes;
 		}
@@ -231,6 +244,7 @@ copy_out:
 	if (error)
 		tt_record2("homa_copy_to_user returning error %d for id %d",
 				-error, rpc->id);
+	pr_notice("HOMA homa_copy_to_user returned: %d\n", error);
 	return error;
 }
 
@@ -1564,6 +1578,7 @@ struct homa_rpc *homa_wait_for_message(struct homa_sock *hsk, int flags,
 		}
 		if (error < 0) {
 			result = ERR_PTR(error);
+			pr_err("HOMA homa_register_interests() error: %d\n", error);
 			goto found_rpc;
 		}
 
@@ -1687,8 +1702,10 @@ found_rpc:
 				homa_rpc_unlock(rpc);
 				continue;
 			}
-			if (!rpc->error)
+			if (!rpc->error) {
+				pr_notice("calling homa_copy_to_user()\n");
 				rpc->error = homa_copy_to_user(rpc);
+			}
 			if (rpc->error)
 				goto done;
 			atomic_andnot(RPC_PKTS_READY, &rpc->flags);
