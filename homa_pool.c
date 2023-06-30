@@ -103,11 +103,13 @@ int homa_pool_init(struct homa_pool *pool, struct homa *homa,
  */
 void homa_pool_destroy(struct homa_pool *pool)
 {
+	pr_info("homa_pool_destroy() called\n");
 	if (!pool->region)
 		return;
-	kfree(pool->descriptors);
-	kfree(pool->cores);
+	kvfree(pool->descriptors);
+	kvfree(pool->cores);
 	pool->region = NULL;
+	pr_info("homa_pool_destroy() finished\n");
 }
 
 /**
