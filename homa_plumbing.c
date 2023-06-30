@@ -29,13 +29,13 @@ MODULE_VERSION("0.01");
 
 /* Export symbols for use in nvme-over-homa */
 
-EXPORT_SYMBOL(homa_bind);
+/* EXPORT_SYMBOL(homa_bind);
 EXPORT_SYMBOL(homa_shutdown);
 // EXPORT_SYMBOL(homa_abort);
 EXPORT_SYMBOL(homa_socket);
 EXPORT_SYMBOL(homa_setsockopt);
 EXPORT_SYMBOL(homa_sendmsg);
-EXPORT_SYMBOL(homa_recvmsg);
+EXPORT_SYMBOL(homa_recvmsg); */
 
 
 /* Not yet sure what these variables are for */
@@ -1145,9 +1145,9 @@ done:
 	 */
 	// TODO: within kernel ____sys_recvmsg doesn't get called by sock_recvmsg(), we don't need this, just remove?
 	pr_notice("before compensation, msg->msg_control: %p\n", msg->msg_control);
-	msg->msg_control = ((char *)msg->msg_control) + sizeof(struct homa_recvmsg_args);
+	/* msg->msg_control = ((char *)msg->msg_control) + sizeof(struct homa_recvmsg_args);
 	pr_notice("after compensation, msg->msg_control: %p\n", msg->msg_control);
-	pr_notice("____sys_recvmsg compensation still ran\n");
+	pr_notice("____sys_recvmsg compensation still ran\n"); */
 
 	finish = get_cycles();
 	tt_record3("homa_recvmsg returning id %d, length %d, bpage0 %d",
