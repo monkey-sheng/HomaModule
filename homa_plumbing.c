@@ -43,6 +43,7 @@ long sysctl_homa_mem[3] __read_mostly;
 int sysctl_homa_rmem_min __read_mostly;
 int sysctl_homa_wmem_min __read_mostly;
 atomic_long_t homa_memory_allocated;
+static DEFINE_PER_CPU(int, homa_memory_per_cpu_fw_alloc);
 
 /* Global data for Homa. Never reference homa_data directory. Always use
  * the homa variable instead; this allows overriding during unit tests.
@@ -121,65 +122,67 @@ const struct proto_ops homav6_proto_ops = {
  * homa_proto_ops. Most of these functions have Homa-specific implementations.
  */
 struct proto homa_prot = {
-	.name		   = "HOMA",
-	.owner		   = THIS_MODULE,
-	.close		   = homa_close,
-	.connect	   = ip4_datagram_connect,
-	.disconnect	   = homa_disconnect,
-	.ioctl		   = homa_ioctl,
-	.init		   = homa_socket,
-	.destroy	   = 0,
-	.setsockopt	   = homa_setsockopt,
-	.getsockopt	   = homa_getsockopt,
-	.sendmsg	   = homa_sendmsg,
-	.recvmsg	   = homa_recvmsg,
-	.sendpage	   = homa_sendpage,
-	.backlog_rcv       = homa_backlog_rcv,
-	.release_cb	   = ip4_datagram_release_cb,
-	.hash		   = homa_hash,
-	.unhash		   = homa_unhash,
-	.rehash		   = homa_rehash,
-	.get_port	   = homa_get_port,
-	.memory_allocated  = &homa_memory_allocated,
-	.sysctl_mem	   = sysctl_homa_mem,
-	.sysctl_wmem	   = &sysctl_homa_wmem_min,
-	.sysctl_rmem	   = &sysctl_homa_rmem_min,
-	.obj_size	   = sizeof(struct homa_sock),
-	.diag_destroy	   = homa_diag_destroy,
-	.no_autobind       = 1,
+	.name = "HOMA",
+	.owner = THIS_MODULE,
+	.close = homa_close,
+	.connect = ip4_datagram_connect,
+	.disconnect = homa_disconnect,
+	.ioctl = homa_ioctl,
+	.init = homa_socket,
+	.destroy = 0,
+	.setsockopt = homa_setsockopt,
+	.getsockopt = homa_getsockopt,
+	.sendmsg = homa_sendmsg,
+	.recvmsg = homa_recvmsg,
+	.sendpage = homa_sendpage,
+	.backlog_rcv = homa_backlog_rcv,
+	.release_cb = ip4_datagram_release_cb,
+	.hash = homa_hash,
+	.unhash = homa_unhash,
+	.rehash = homa_rehash,
+	.get_port = homa_get_port,
+	.memory_allocated = &homa_memory_allocated,
+	.per_cpu_fw_alloc = &homa_memory_per_cpu_fw_alloc,
+	.sysctl_mem = sysctl_homa_mem,
+	.sysctl_wmem = &sysctl_homa_wmem_min,
+	.sysctl_rmem = &sysctl_homa_rmem_min,
+	.obj_size = sizeof(struct homa_sock),
+	.diag_destroy = homa_diag_destroy,
+	.no_autobind = 1,
 };
 
 struct proto homav6_prot = {
-	.name		   = "HOMAv6",
-	.owner		   = THIS_MODULE,
-	.close		   = homa_close,
-	.connect	   = ip6_datagram_connect,
-	.disconnect	   = homa_disconnect,
-	.ioctl		   = homa_ioctl,
-	.init		   = homa_socket,
-	.destroy	   = 0,
-	.setsockopt	   = homa_setsockopt,
-	.getsockopt	   = homa_getsockopt,
-	.sendmsg	   = homa_sendmsg,
-	.recvmsg	   = homa_recvmsg,
-	.sendpage	   = homa_sendpage,
-	.backlog_rcv       = homa_backlog_rcv,
-	.release_cb	   = ip6_datagram_release_cb,
-	.hash		   = homa_hash,
-	.unhash		   = homa_unhash,
-	.rehash		   = homa_rehash,
-	.get_port	   = homa_get_port,
-	.memory_allocated  = &homa_memory_allocated,
-	.sysctl_mem	   = sysctl_homa_mem,
-	.sysctl_wmem	   = &sysctl_homa_wmem_min,
-	.sysctl_rmem	   = &sysctl_homa_rmem_min,
+	.name = "HOMAv6",
+	.owner = THIS_MODULE,
+	.close = homa_close,
+	.connect = ip6_datagram_connect,
+	.disconnect = homa_disconnect,
+	.ioctl = homa_ioctl,
+	.init = homa_socket,
+	.destroy = 0,
+	.setsockopt = homa_setsockopt,
+	.getsockopt = homa_getsockopt,
+	.sendmsg = homa_sendmsg,
+	.recvmsg = homa_recvmsg,
+	.sendpage = homa_sendpage,
+	.backlog_rcv = homa_backlog_rcv,
+	.release_cb = ip6_datagram_release_cb,
+	.hash = homa_hash,
+	.unhash = homa_unhash,
+	.rehash = homa_rehash,
+	.get_port = homa_get_port,
+	.memory_allocated = &homa_memory_allocated,
+	.per_cpu_fw_alloc = &homa_memory_per_cpu_fw_alloc,
+	.sysctl_mem = sysctl_homa_mem,
+	.sysctl_wmem = &sysctl_homa_wmem_min,
+	.sysctl_rmem = &sysctl_homa_rmem_min,
 
 	/* IPv6 data comes *after* Homa's data, and isn't included in
 	 * struct homa_sock.
 	 */
-	.obj_size	   = sizeof(struct homa_sock) + sizeof(struct ipv6_pinfo),
-	.diag_destroy	   = homa_diag_destroy,
-	.no_autobind       = 1,
+	.obj_size = sizeof(struct homa_sock) + sizeof(struct ipv6_pinfo),
+	.diag_destroy = homa_diag_destroy,
+	.no_autobind = 1,
 };
 
 /* Top-level structure describing the Homa protocol. */
@@ -995,7 +998,7 @@ error:
  *               errno.
  */
 int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
-		 int nonblocking, int flags, int *addr_len)
+		 int flags, int *addr_len)
 {
 	struct homa_sock *hsk = homa_sk(sk);
 	struct homa_recvmsg_args control;
@@ -1053,9 +1056,10 @@ int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	control.num_bpages = 0;
 
 	pr_info("homa_wait_for_message start\n");
-	rpc = homa_wait_for_message(hsk, nonblocking
+	/* rpc = homa_wait_for_message(hsk, nonblocking
 			? (control.flags | HOMA_RECVMSG_NONBLOCKING)
-			: control.flags, control.id);
+			: control.flags, control.id); */
+	rpc = homa_wait_for_message(hsk, control.flags, control.id);
 	if (IS_ERR(rpc)) {
 		/* If we get here, it means there was an error that prevented
 		 * us from finding an RPC to return. If there's an error in
