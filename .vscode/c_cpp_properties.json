@@ -5,10 +5,10 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "${workspaceFolder}",
-                "/home/vagrant/linux-6.2.16/include/",
-                "/home/vagrant/linux-6.2.16/usr/include/",
-                "/home/vagrant/linux-6.2.16/arch/x86/include/",
-                "/home/vagrant/linux-6.2.16/arch/x86/include/generated/",
+                "/home/vagrant/linux-6.5-rc2/include/",
+                "/home/vagrant/linux-6.5-rc2/usr/include/",
+                "/home/vagrant/linux-6.5-rc2/arch/x86/include/",
+                "/home/vagrant/linux-6.5-rc2/arch/x86/include/generated/",
             ],
             "defines": [
                 "__GNUC__",

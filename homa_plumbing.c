@@ -89,7 +89,7 @@ const struct proto_ops homa_proto_ops = {
 	.sendmsg	   = inet_sendmsg,
 	.recvmsg	   = inet_recvmsg,
 	.mmap		   = sock_no_mmap,
-	.sendpage	   = sock_no_sendpage,
+	// .sendpage	   = sock_no_sendpage,
 	.set_peek_off	   = sk_set_peek_off,
 };
 
@@ -111,7 +111,7 @@ const struct proto_ops homav6_proto_ops = {
 	.sendmsg	   = inet_sendmsg,
 	.recvmsg	   = inet_recvmsg,
 	.mmap		   = sock_no_mmap,
-	.sendpage	   = sock_no_sendpage,
+	// .sendpage	   = sock_no_sendpage,
 	.set_peek_off	   = sk_set_peek_off,
 };
 
@@ -134,7 +134,7 @@ struct proto homa_prot = {
 	.getsockopt = homa_getsockopt,
 	.sendmsg = homa_sendmsg,
 	.recvmsg = homa_recvmsg,
-	.sendpage = homa_sendpage,
+	// .sendpage = homa_sendpage,
 	.backlog_rcv = homa_backlog_rcv,
 	.release_cb = ip4_datagram_release_cb,
 	.hash = homa_hash,
@@ -164,7 +164,7 @@ struct proto homav6_prot = {
 	.getsockopt = homa_getsockopt,
 	.sendmsg = homa_sendmsg,
 	.recvmsg = homa_recvmsg,
-	.sendpage = homa_sendpage,
+	// .sendpage = homa_sendpage,
 	.backlog_rcv = homa_backlog_rcv,
 	.release_cb = ip6_datagram_release_cb,
 	.hash = homa_hash,
@@ -756,7 +756,8 @@ int homa_ioc_abort(struct sock *sk, unsigned long arg) {
  *
  * Return: 0 on success, otherwise a negative errno.
  */
-int homa_ioctl(struct sock *sk, int cmd, unsigned long arg) {
+int homa_ioctl(struct sock *sk, int cmd, int *karg) {
+	int arg = *karg;
 	int result;
 	__u64 start = get_cycles();
 
@@ -876,6 +877,16 @@ int homa_sendmsg(struct sock *sk, struct msghdr *msg, size_t length) {
 	int result = 0;
 	struct homa_rpc *rpc = NULL;
 	sockaddr_in_union *addr = (sockaddr_in_union *) msg->msg_name;
+	
+	int zc = 0;
+	if (msg->msg_flags & MSG_SPLICE_PAGES)
+	{
+		// TODO: should probably need this
+		// if (sk->sk_route_caps & NETIF_F_SG)
+		zc = MSG_SPLICE_PAGES;
+		pr_info("homa_sendmsg using zc = MSG_SPLICE_PAGES\n");
+	}
+	// pr_info("gfp for sk: %d, sk->sk_allocation == GFP_KERNEL: %d\n", sk->sk_allocation, sk->sk_allocation == GFP_KERNEL); // true
 
 	// we are in kernel, this doesn't apply
 	/* if (unlikely(!msg->msg_control_is_user)) {
@@ -883,7 +894,8 @@ int homa_sendmsg(struct sock *sk, struct msghdr *msg, size_t length) {
 		goto error;
 	} */
 	if (memcpy(&args, msg->msg_control,
-			sizeof(args)) == 0) {
+			   sizeof(args)) == 0)
+	{
 		result = -EFAULT;
 		goto error;
 	}
@@ -916,7 +928,7 @@ int homa_sendmsg(struct sock *sk, struct msghdr *msg, size_t length) {
 			goto error;
 		}
 		rpc->completion_cookie = args.completion_cookie;
-		result = homa_message_out_init(rpc, &msg->msg_iter, 1);
+		result = homa_message_out_init(rpc, &msg->msg_iter, 1, zc);
 		if (result){
 			pr_err("homa_message_out_init: %d\n", result);
 			goto error;
@@ -965,7 +977,7 @@ int homa_sendmsg(struct sock *sk, struct msghdr *msg, size_t length) {
 		}
 		rpc->state = RPC_OUTGOING;
 
-		result = homa_message_out_init(rpc, &msg->msg_iter, 1);
+		result = homa_message_out_init(rpc, &msg->msg_iter, 1, zc);
 		if (result)
 			goto error;
 		homa_rpc_unlock(rpc);
@@ -1096,8 +1108,10 @@ int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 	control.completion_cookie = rpc->completion_cookie;
 	if (likely(rpc->msgin.total_length >= 0)) {
 		control.num_bpages = rpc->msgin.num_bpages;
+		pr_info("copy results start\n");
 		memcpy(control.bpage_offsets, rpc->msgin.bpage_offsets,
 				sizeof(control.bpage_offsets));
+		pr_info("copy results finished\n");
 	}
 	if (sk->sk_family == AF_INET6) {
 		struct sockaddr_in6 *in6 = msg->msg_name;
@@ -1107,6 +1121,8 @@ int homa_recvmsg(struct sock *sk, struct msghdr *msg, size_t len,
 		*addr_len = sizeof(*in6);
 	} else {
 		struct sockaddr_in *in4 = msg->msg_name;
+		pr_notice("msg: %p, msg->msg_name: %p, in4->sin_family: %p\n", msg, in4, &(in4->sin_family));
+
 		in4->sin_family = AF_INET;
 		in4->sin_port = htons(rpc->dport);
 		in4->sin_addr.s_addr = ipv6_to_ipv4(
@@ -1170,11 +1186,13 @@ done:
  * @flags:  ??
  * Return:  0 on success, otherwise a negative errno.
  */
-int homa_sendpage(struct sock *sk, struct page *page, int offset,
-		  size_t size, int flags) {
-	printk(KERN_WARNING "unimplemented sendpage invoked on Homa socket\n");
-	return -ENOSYS;
-}
+// int homa_sendpage(struct sock *sk, struct page *page, int offset,
+// 		  size_t size, int flags) {
+// 	/* printk(KERN_WARNING "unimplemented sendpage invoked on Homa socket\n");
+// 	return -ENOSYS; */
+// 	struct homa_sock *hsk = homa_sk(sk);
+	
+// }
 
 /**
  * homa_hash() - ??.

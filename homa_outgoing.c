@@ -50,10 +50,12 @@ inline static void set_priority(struct sk_buff *skb, struct homa_sock *hsk,
  * @iter:    Describes location(s) of message data in user space.
  * @xmit:    Nonzero means this method should start transmitting packets;
  *           zero means the caller will initiate transmission.
+ * @zc:      MSG_SPLICE_PAGES, or MSG_ZEROCOPY, method of ZC to use for building skb's.
+ *           MSG_SPLICE_PAGES is equivalent to the old `sendpage`.
  *
  * Return:   0 for success, or a negative errno for failure.
  */
-int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit)
+int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit, int zc)
 {
 	/* Geometry information for packets:
 	 * mtu:              largest size for an on-the-wire packet (including
@@ -207,11 +209,25 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit)
 			seg->ack.client_id = 0;
 			homa_peer_get_acks(rpc->peer, 1, &seg->ack);
 			// TODO: this is meant for user space
-			ret = copy_from_iter(skb_put(skb, seg_size), seg_size,
-										iter);
+			if (zc == 0) {
+				pr_info("HOMA not using zc\n");
+				ret = copy_from_iter(skb_put(skb, seg_size), seg_size,
+									 iter);
+			}
+			else if (zc == MSG_SPLICE_PAGES) { // TODO: do we really need this loop for sendpage?
+				pr_info("HOMA using zc skb_splice_from_iter()\n");
+				ret = skb_splice_from_iter(skb, iter, seg_size, GFP_KERNEL);  // if pages aren't proper, ret will be an error
+				pr_info("skb_splice_from_iter ret: %ld\n", ret);
+			}
+			else {
+				pr_err("unknown zc value %d in homa_message_out_init\n", zc);
+				err = -EFAULT;
+				goto error;
+			}
+
 			if (ret != seg_size)
 			{
-				pr_err("copy_from_iter failed: %ld\n", ret);
+				pr_err("copy_from_iter or skb_splice_from_iter failed:, ret = %ld, seg_size = %d\n", ret, seg_size);
 				err = -EFAULT;
 				kfree_skb(skb);
 				homa_rpc_lock(rpc);

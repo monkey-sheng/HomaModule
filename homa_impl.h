@@ -3032,13 +3032,13 @@ extern enum hrtimer_restart
 extern int      homa_init(struct homa *homa);
 extern void     homa_incoming_sysctl_changed(struct homa *homa);
 extern int      homa_ioc_abort(struct sock *sk, unsigned long arg);
-extern int      homa_ioctl(struct sock *sk, int cmd, unsigned long arg);
+extern int      homa_ioctl(struct sock *sk, int cmd, int *karg);  // used to be unsigned long
 extern void     homa_log_grantable_list(struct homa *homa);
 extern void     homa_log_throttled(struct homa *homa);
 extern void     homa_message_in_init(struct homa_message_in *msgin, int length,
 		    int incoming);
 extern int      homa_message_out_init(struct homa_rpc *rpc,
-		    struct iov_iter *iter, int xmit);
+		    struct iov_iter *iter, int xmit, int zc);
 extern loff_t   homa_metrics_lseek(struct file *file, loff_t offset,
 		    int whence);
 extern int      homa_metrics_open(struct inode *inode, struct file *file);
