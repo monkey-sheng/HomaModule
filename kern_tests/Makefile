@@ -7,4 +7,4 @@ all: $(PROG)
 module:
 	make -I/home/vagrant/HomaModule0 -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
 clean:
-	(rm -rf *.o *.ko modules.order *.mod.c *.mod.o Module.symvers kern_homa_server_test.mod *.cmd)
+	(rm -rf .*.cmd *.o *.mod.c *.ko *.mod modules.order Module.symvers)
