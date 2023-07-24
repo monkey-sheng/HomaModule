@@ -39,17 +39,6 @@ extern int homa_bind(struct socket *sock, struct sockaddr *addr, int addr_len); 
 static int __init
 server_init(void)
 {
-    // int error = misc_register(&hello_miscdev);
-    // if (error)
-    // {
-    //     printk(KERN_ERR "%s misc_register() failed\n", __FUNCTION__);
-    //     return -1;
-    // }
-    // else
-    // {
-    //     pr_info("misc_register %s\n", __FUNCTION__);
-    // }
-    // hello_dev = &hello_miscdev;
     printk(KERN_INFO "loaded kern homa server test\n");
     printk(KERN_INFO "Hello world!\n");
 
@@ -122,12 +111,12 @@ server_init(void)
     recv_hdr.msg_namelen = sizeof(struct sockaddr_in);
     pr_info("%s\n", "calling sock_recvmsg()...");
     // TODO: kern_recvmsg
-    struct kvec unused_kvec;
+    // struct kvec unused_kvec;
     pr_notice("before kernel_recvmsg(), recv_hdr.msg_control = recv_args addr: %p\n", recv_args);
     pr_notice("before kernel_recvmsg(), &recv_hdr: %p\n", &recv_hdr);
     pr_notice("recv_hdr: %p, recv_hdr.msg_name: %p\n", &recv_hdr, &recv_hdr.msg_name);
-    int length = kernel_recvmsg(sock, &recv_hdr, &unused_kvec, 1, 1000, 0); // kvecs (can't be null), and flags in msghdr are unused by homa
-    // int length = sock_recvmsg(sock, &recv_hdr, 0); // flags in msghdr are unused by homa
+    // int length = kernel_recvmsg(sock, &recv_hdr, &unused_kvec, 1, 1000, 0); // kvecs (can't be null), and flags in msghdr are unused by homa
+    int length = sock_recvmsg(sock, &recv_hdr, 0); // flags in msghdr are unused by homa
     if (length < 0) {
         pr_err("kernel_recvmsg error: %d\n", length);
         return length;

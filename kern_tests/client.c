@@ -70,16 +70,8 @@ client_init(void)
     send_hdr.msg_control = &send_args;
     send_hdr.msg_controllen = sizeof(send_args);
     send_hdr.msg_control_is_user = false;
+    send_hdr.msg_flags = 0; // MSG_SPLICE_PAGES would mean sendpage
 
-    /* char msg_content[] = "ping from client!\n";
-    struct iovec msg_iov = {.iov_base = msg_content, .iov_len = sizeof(msg_content)};
-    struct iov_iter iter;
-    iov_iter_init(&iter, WRITE, &msg_iov, 1, sizeof(msg_content));  // total bytes same as size of struct (bc only the struct)
-    send_hdr.msg_iter = iter;
-    // send_hdr.msg_iovlen = 1;
-    send_hdr.msg_control_is_user = 0; */
-
-    // ret = sock_sendmsg(sock, &send_hdr);
     char msg_string1[] = "this is a message to be sent. this is the second sentence in message\n";
     // msg_string1[sizeof(msg_string1) - 1] = ' ';
     char msg_string2[] = "this is the second line in message\n";
