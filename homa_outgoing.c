@@ -94,6 +94,7 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 	 */
 	dst = homa_get_dst(rpc->peer, rpc->hsk);
 	mtu = dst_mtu(dst);
+	// TODO: print mtu size
 	max_pkt_data = mtu - rpc->hsk->ip_header_length
 			- sizeof(struct data_header);
 
@@ -240,6 +241,8 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 					- (max_pkt_data - seg_size)
 					+ HOMA_ETH_OVERHEAD;
 		} while ((available > 0) && (bytes_left > 0));
+
+		pr_notice("skb->len: %d, skb->data_len: %d\n", skb->len, skb->data_len);
 
 		homa_rpc_lock(rpc);
 		*last_link = skb;
