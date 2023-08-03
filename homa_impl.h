@@ -298,7 +298,7 @@ struct data_segment {
 	struct homa_ack ack;
 
 	/** @data: the payload of this segment. */
-	char data[0];
+	char data[0];  // FIXME: this is never used??
 } __attribute__((packed));
 
 /* struct data_header - Overall header format for a DATA sk_buff, which
