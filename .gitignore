@@ -1,20 +1,8 @@
-.*.swp
-\#*#
-*.pyc
+*.cmd
+*.mod
+*.mod.c
 *.o
-*.hi
-*.dump
-*.log
-*.rej
-*.orig
-*.patch
-*.diff
-.tags*
-.deps
-*.pdf
+*.ko
+Module.symvers
+modules.order
 
-# Ignore IDE files
-/.idea/
-/nbproject/
-
-reports/
