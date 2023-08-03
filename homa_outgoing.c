@@ -94,7 +94,6 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 	 */
 	dst = homa_get_dst(rpc->peer, rpc->hsk);
 	mtu = dst_mtu(dst);
-	// TODO: print mtu size
 	max_pkt_data = mtu - rpc->hsk->ip_header_length
 			- sizeof(struct data_header);
 
@@ -138,6 +137,7 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 	}
 	UNIT_LOG("; ", "mtu %d, max_pkt_data %d, gso_size %d, gso_pkt_data %d",
 			mtu, max_pkt_data, gso_size, rpc->msgout.gso_pkt_data);
+	pr_notice("HOMA: mtu %d, max_pkt_data %d, gso_size %d, gso_pkt_data %d\n", mtu, max_pkt_data, gso_size, rpc->msgout.gso_pkt_data);
 
 	overlap_xmit = rpc->msgout.length > 2*rpc->msgout.gso_pkt_data;
 	rpc->msgout.granted = rpc->msgout.unscheduled;
@@ -161,7 +161,9 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 
 		skb = alloc_skb(HOMA_SKB_EXTRA + gso_size
 				+ sizeof32(struct homa_skb_info), GFP_KERNEL);
-		if (unlikely(!skb)) {
+		pr_info("alloc_skb() called\n");
+		if (unlikely(!skb))
+		{
 			err = -ENOMEM;
 			homa_rpc_lock(rpc);
 			goto error;
@@ -170,6 +172,7 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 				&& (rpc->msgout.gso_pkt_data > max_pkt_data)) {
 			skb_shinfo(skb)->gso_size = sizeof(struct data_segment)
 					+ max_pkt_data;
+			pr_notice("skb_shinfo(skb)->gso_size: %d\n", skb_shinfo(skb)->gso_size);
 			skb_shinfo(skb)->gso_type = gso_type;
 		}
 		skb_shinfo(skb)->gso_segs = 0;
@@ -190,7 +193,11 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 		h->incoming = htonl(rpc->msgout.unscheduled);
 		h->cutoff_version = rpc->peer->cutoff_version;
 		h->retransmit = 0;
-		homa_get_skb_info(skb)->wire_bytes = 0;
+		// TODO: print hex dump of data_header!!!
+		print_hex_dump_bytes("struct data_header: ", DUMP_PREFIX_NONE, h, sizeof(*h) - sizeof(struct data_segment));
+
+		homa_get_skb_info(skb)
+			->wire_bytes = 0;
 
 		available = rpc->msgout.gso_pkt_data;
 
@@ -198,9 +205,10 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 		 * (which will become a separate packet after GSO) to the buffer.
 		 */
 		do {
+			pr_info("homa_message_out_init do while loop\n");
 			int seg_size;
 			size_t ret;
-			seg = (struct data_segment *)skb_put(skb, sizeof(*seg));
+			seg = (struct data_segment *)skb_put(skb, sizeof(*seg)); // skb_put can't be used with skb with page data
 			seg->offset = htonl(rpc->msgout.length - bytes_left);
 			if (bytes_left <= max_pkt_data)
 				seg_size = bytes_left;
@@ -209,9 +217,13 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 			seg->segment_length = htonl(seg_size);
 			seg->ack.client_id = 0;
 			homa_peer_get_acks(rpc->peer, 1, &seg->ack);
-			// TODO: this is meant for user space
-			if (zc == 0) {
-				pr_info("HOMA not using zc\n");
+			// TODO: print hex dump of data_segment
+			print_hex_dump_bytes("struct data_segment: ", DUMP_PREFIX_NONE, seg, sizeof(*seg));
+
+			// this is meant for user space??
+			if (zc == 0)
+			{
+				pr_info("HOMA not using zc, seg_size = %d\n", seg_size);
 				ret = copy_from_iter(skb_put(skb, seg_size), seg_size,
 									 iter);
 			}

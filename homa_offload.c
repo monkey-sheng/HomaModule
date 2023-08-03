@@ -93,6 +93,8 @@ struct sk_buff *homa_gso_segment(struct sk_buff *skb,
 	struct sk_buff *segs;
 	tt_record2("homa_gso_segment invoked, frags %d, headlen %d",
 			skb_shinfo(skb)->nr_frags, skb_headlen(skb));
+	pr_notice("homa_gso_segment invoked: frags %d, headlen %d",
+			skb_shinfo(skb)->nr_frags, skb_headlen(skb));
 
 	/* This is needed to separate header info (which is replicated
 	 * in each segment) from data, which is divided among the segments.
