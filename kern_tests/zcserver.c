@@ -160,11 +160,11 @@ server_init(void)
     }
     pr_info("copied message: %s\n", recvbuf);  // long prints won't all be printed out
     //// match up with client send contents, very rough checks here ////
-    char *expected = kzalloc(4129, GFP_KERNEL);
+    char *expected = kzalloc(9999, GFP_KERNEL);
     char msg_string[] = "this is some message on page!!!!";
     int _cnt = 0;
     int _offset = 0;
-    int _nr = 128;
+    int _nr = 127;
     for (_cnt = 0; _cnt < _nr; _cnt++) // if overwritting the page, things will break badly later without warning
     {
         // pr_notice("offset = %d\n", _offset);
@@ -172,7 +172,7 @@ server_init(void)
         _offset += sizeof(msg_string) - 1;
     }
     memcpy(expected + _offset, msg_string, sizeof(msg_string));
-    pr_notice("memcmp with expected: %d\n", memcmp(recvbuf, expected, 4129));
+    pr_notice("memcmp with expected: %d\n", strcmp(recvbuf, expected));
     kfree(expected);
     ////////////////////////////////////////////////////////////////
     kvfree(recvbuf);

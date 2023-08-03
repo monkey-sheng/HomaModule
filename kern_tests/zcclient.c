@@ -5,6 +5,7 @@
 #include <linux/file.h>
 #include <linux/socket.h>
 #include <net/sock.h>
+#include <linux/inet.h>
 // #include "homa.h"
 #include "../homa.h"
 
@@ -60,7 +61,13 @@ client_init(void)
     memset(&target_addr, 0, sizeof(target_addr));
     target_addr.sin_port = htons(SERVER_PORT);
     target_addr.sin_family = AF_INET;
-    target_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    // set the address to send to
+    ret = in4_pton("192.168.15.3", -1, (u8 *) &(target_addr.sin_addr.s_addr), '\0', NULL);
+    if (ret == 0) {
+        pr_err("in4_pton() error!\n");
+        return -1;
+    }
+    // target_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
     send_args.completion_cookie = 87654321;
     send_args.id = 0; // request should specify id = 0, will be set by homa
@@ -70,7 +77,7 @@ client_init(void)
     send_hdr.msg_control = &send_args;
     send_hdr.msg_controllen = sizeof(send_args);
     send_hdr.msg_control_is_user = false;
-    send_hdr.msg_flags = MSG_SPLICE_PAGES;  // sendpage/splice
+    send_hdr.msg_flags = 0; // MSG_SPLICE_PAGES;  // sendpage/splice
 
     // ret = sock_sendmsg(sock, &send_hdr);
     // char msg_string1[] = "this is meant to be a sendpage message to be sent. this is the second sentence in message\n";
@@ -100,10 +107,10 @@ client_init(void)
     char msg_string[] = "this is some message on page!!!!";
     int _cnt = 0;
     int _offset = 0;
-    int _nr = 128;
+    int _nr = 127;
     for (_cnt = 0; _cnt < _nr; _cnt++) // if overwritting the page, things will break badly later without warning
     {
-        pr_notice("offset = %d\n", _offset);
+        // pr_notice("offset = %d\n", _offset);
         memcpy(page_addr1 + _offset, msg_string, sizeof(msg_string)-1); // don't copy the \0 for easier receive and printing on server
         _offset += sizeof(msg_string)-1;
     }
