@@ -147,7 +147,8 @@ struct sk_buff *homa_gro_receive(struct list_head *held_list,
 	 *    gro_list by the caller, so it will be considered for merges
 	 *    in the future.
 	 */
-//	int hdr_offset, hdr_end;
+	pr_notice("homa_gro_receive() invoked\n");
+	//	int hdr_offset, hdr_end;
 	struct sk_buff *held_skb;
 	struct sk_buff *result = NULL;
 	struct homa_core *core = homa_cores[raw_smp_processor_id()];
