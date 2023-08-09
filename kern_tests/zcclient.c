@@ -62,7 +62,7 @@ client_init(void)
     target_addr.sin_port = htons(SERVER_PORT);
     target_addr.sin_family = AF_INET;
     // set the address to send to
-    ret = in4_pton("192.168.15.3", -1, (u8 *) &(target_addr.sin_addr.s_addr), '\0', NULL);
+    ret = in4_pton("192.168.2.3", -1, (u8 *) &(target_addr.sin_addr.s_addr), '\0', NULL);
     if (ret == 0) {
         pr_err("in4_pton() error!\n");
         return -1;
