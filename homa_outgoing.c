@@ -114,6 +114,8 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 		int repl_length, pkts_per_gso;
 
 		gso_size = rpc->peer->dst->dev->gso_max_size;
+		pr_notice("dev->gso_max_size: %d\n", gso_size);
+		pr_notice("homa->max_gso_size: %d\n", rpc->hsk->homa->max_gso_size); // smaller than dev max, why?
 		if (gso_size > rpc->hsk->homa->max_gso_size)
 			gso_size = rpc->hsk->homa->max_gso_size;
 
@@ -151,6 +153,12 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 			"unscheduled %d",
 			rpc->id, rpc->msgout.length, rpc->msgout.unscheduled);
 	last_link = &rpc->msgout.packets;
+
+	// info for processing bvecs for paged skbs
+	size_t curr_bvec_n = 0; // original nth bvec of payload getting processed
+	size_t nr_segs_payload = iter->nr_segs;		// original no. of iovecs
+	struct bio_vec *bvecs_payload = iter->bvec; // iter_iov(iter); // original bvecs (holding payload data)
+
 	for (bytes_left = rpc->msgout.length; bytes_left > 0; ) {
 		struct data_header *h;
 		struct data_segment *seg;
@@ -196,63 +204,118 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 		// TODO: print hex dump of data_header!!!
 		print_hex_dump_bytes("struct data_header: ", DUMP_PREFIX_NONE, h, sizeof(*h) - sizeof(struct data_segment));
 
-		homa_get_skb_info(skb)
-			->wire_bytes = 0;
+		homa_get_skb_info(skb)->wire_bytes = 0;
 
 		available = rpc->msgout.gso_pkt_data;
 
 		/* Each iteration of the following loop adds one segment
 		 * (which will become a separate packet after GSO) to the buffer.
 		 */
-		do {
-			pr_info("homa_message_out_init do while loop\n");
-			int seg_size;
-			size_t ret;
-			seg = (struct data_segment *)skb_put(skb, sizeof(*seg)); // skb_put can't be used with skb with page data
-			seg->offset = htonl(rpc->msgout.length - bytes_left);
-			if (bytes_left <= max_pkt_data)
-				seg_size = bytes_left;
-			else
-				seg_size = max_pkt_data;
-			seg->segment_length = htonl(seg_size);
-			seg->ack.client_id = 0;
-			homa_peer_get_acks(rpc->peer, 1, &seg->ack);
-			// TODO: print hex dump of data_segment
-			print_hex_dump_bytes("struct data_segment: ", DUMP_PREFIX_NONE, seg, sizeof(*seg));
+		if (zc == 0)
+		{
+			do {
+				pr_info("homa_message_out_init do while loop\n");
+				int seg_size;
+				size_t ret;
+				seg = (struct data_segment *)skb_put(skb, sizeof(*seg)); // skb_put can't be used with skb with page data
+				seg->offset = htonl(rpc->msgout.length - bytes_left);
+				if (bytes_left <= max_pkt_data)
+					seg_size = bytes_left;
+				else
+					seg_size = max_pkt_data;
+				seg->segment_length = htonl(seg_size);
+				seg->ack.client_id = 0;
+				homa_peer_get_acks(rpc->peer, 1, &seg->ack);
+				print_hex_dump_bytes("struct data_segment: ", DUMP_PREFIX_NONE, seg, sizeof(*seg));
 
-			// this is meant for user space??
-			if (zc == 0)
-			{
-				pr_info("HOMA not using zc, seg_size = %d\n", seg_size);
-				ret = copy_from_iter(skb_put(skb, seg_size), seg_size,
-									 iter);
-			}
-			else if (zc == MSG_SPLICE_PAGES) { // TODO: do we really need this loop for sendpage?
-				pr_info("HOMA using zc skb_splice_from_iter()\n");
-				ret = skb_splice_from_iter(skb, iter, seg_size, GFP_KERNEL);  // if pages aren't proper, ret will be an error
-				pr_info("skb_splice_from_iter ret: %ld\n", ret);
-			}
-			else {
-				pr_err("unknown zc value %d in homa_message_out_init\n", zc);
-				err = -EFAULT;
-				goto error;
-			}
+				// this is meant for user space??
+				pr_info("HOMA NOT using zc, seg_size = %d\n", seg_size);
+				ret = copy_from_iter(skb_put(skb, seg_size), seg_size, iter);
 
-			if (ret != seg_size)
+				if (ret != seg_size)
+				{
+					pr_err("copy_from_iter failed:, ret = %ld, seg_size = %d\n", ret, seg_size);
+					err = -EFAULT;
+					kfree_skb(skb);
+					homa_rpc_lock(rpc);
+					goto error;
+				}
+				bytes_left -= seg_size;
+				(skb_shinfo(skb)->gso_segs)++;
+				available -= seg_size;
+				homa_get_skb_info(skb)->wire_bytes += mtu
+						- (max_pkt_data - seg_size)
+						+ HOMA_ETH_OVERHEAD;
+			} while ((available > 0) && (bytes_left > 0));
+		}
+		else if (zc == MSG_SPLICE_PAGES)
+		{
+			/* ret = skb_splice_from_iter(skb, iter, seg_size, GFP_KERNEL); */
+			// write data_segment into pages, and put them in between actual data payload
+			ssize_t ret;
+			pr_notice("nr_segs_payload: %d, (starting) bvecs_payload: %p\n", nr_segs_payload, bvecs_payload);
+			size_t curr_bvec_new_n = 0; // ptr into bvecs_new array below
+			size_t nr_segs_left = nr_segs_payload - curr_bvec_n; // this many bvecs left to process
+			// possible max of new segs from payload, not including new data_segment
+			size_t nr_new_segs_max = (DIV_ROUND_UP(PAGE_SIZE, max_pkt_data) * nr_segs_left); // TODO: can use fewer
+			pr_notice("nr_new_segs_max: \n", nr_new_segs_max);
+			struct bio_vec *bvecs_new = kmalloc_array(nr_new_segs_max * 2, sizeof(struct bio_vec), GFP_KERNEL);
+			size_t bvecs_new_total_size = 0;
+			do
 			{
-				pr_err("copy_from_iter or skb_splice_from_iter failed:, ret = %ld, seg_size = %d\n", ret, seg_size);
-				err = -EFAULT;
-				kfree_skb(skb);
-				homa_rpc_lock(rpc);
-				goto error;
-			}
-			bytes_left -= seg_size;
-			(skb_shinfo(skb)->gso_segs)++;
-			available -= seg_size;
-			homa_get_skb_info(skb)->wire_bytes += mtu
-					- (max_pkt_data - seg_size)
-					+ HOMA_ETH_OVERHEAD;
-		} while ((available > 0) && (bytes_left > 0));
+				// TODO: this loop inserts corresponding struct data_segment, then splits the bvecs of the original into mtu-compat ones
+				// would be sth like: data_header---data_segment---some mtu compat payload as bvec---...(data_segment and bvec repeated)
+
+				// NOTE: int available: just the num of bytes available per skb, accounting for max_gso_size
+				// NOTE: int bytes_left: num of bytes not processed yet for the whole msg data payload
+
+				pr_info("homa_message_out_init sendpage do while loop\n");
+				// TODO: these will get freed later by the network stack, don't free them in this func?
+				// TODO: for now, it's data_segment per page, maybe fill a page up?
+				seg = (struct data_segment*) __get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
+
+				int seg_size;
+				unsigned int curr_bvec_len = bvecs_payload[curr_bvec_n].bv_len;
+				unsigned int curr_bvec_offset_in_seg = 0;
+				while (curr_bvec_len > 0)
+				{
+					seg->offset = htonl(rpc->msgout.length - bytes_left);
+					if (bytes_left <= max_pkt_data)
+						seg_size = bytes_left;
+					else
+						seg_size = max_pkt_data;
+					seg->segment_length = htonl(seg_size);
+					seg->ack.client_id = 0;
+					homa_peer_get_acks(rpc->peer, 1, &seg->ack);
+					print_hex_dump_bytes("struct data_segment: ", DUMP_PREFIX_NONE, seg, sizeof(*seg));
+					pr_info("HOMA using zc, seg_size = %d\n", seg_size);
+
+					bvec_set_virt(&bvecs_new[curr_bvec_new_n], seg, sizeof(*seg));
+					void *curr_seg_bvec_offset = bvecs_payload[curr_bvec_n].bv_offset + curr_bvec_offset_in_seg;
+					pr_notice("curr_seg_bvec_offset: %p\n", curr_seg_bvec_offset);
+					bvec_set_virt(&bvecs_new[curr_bvec_new_n + 1], curr_seg_bvec_offset, seg_size);
+					bvecs_new_total_size += (sizeof(*seg) + seg_size);
+					curr_bvec_offset_in_seg += seg_size;
+					curr_bvec_len -= seg_size;
+					curr_bvec_new_n += 2;
+					pr_notice("curr_bvec_new_n: %d\n", curr_bvec_new_n);
+					bytes_left -= seg_size;
+					(skb_shinfo(skb)->gso_segs)++;
+					available -= seg_size;
+					homa_get_skb_info(skb)->wire_bytes += mtu - (max_pkt_data - seg_size) + HOMA_ETH_OVERHEAD;
+				}
+				curr_bvec_n++;
+			} while (/* TODO */ (available > 0) && (bytes_left > 0)); /* TODO: free *bvecs_new */
+			struct iov_iter new_iter;
+			iov_iter_bvec(&new_iter, ITER_SOURCE, bvecs_new, curr_bvec_new_n, bvecs_new_total_size);
+			ret = skb_splice_from_iter(skb, &new_iter, seg_size, GFP_KERNEL); //TODO
+		}
+		else
+		{
+			pr_err("unknown zc value %d in homa_message_out_init\n", zc);
+			err = -EFAULT;
+			goto error;
+		}
 
 		pr_notice("skb->len: %d, skb->data_len: %d\n", skb->len, skb->data_len);
 
