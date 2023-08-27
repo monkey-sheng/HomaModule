@@ -308,7 +308,17 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 			} while (/* TODO */ (available > 0) && (bytes_left > 0)); /* TODO: free *bvecs_new */
 			struct iov_iter new_iter;
 			iov_iter_bvec(&new_iter, ITER_SOURCE, bvecs_new, curr_bvec_new_n, bvecs_new_total_size);
-			ret = skb_splice_from_iter(skb, &new_iter, seg_size, GFP_KERNEL); //TODO
+			pr_notice("bvecs_new_total_size: %d, total final bvecs: %d\n", bvecs_new_total_size, curr_bvec_new_n);
+			ret = skb_splice_from_iter(skb, &new_iter, curr_bvec_new_n, GFP_KERNEL); // TODO
+			if (ret < 0)
+			{
+				pr_err("skb_splice_from_iter failed:, ret = %d\n", ret);
+				err = -EFAULT;
+				kfree_skb(skb);
+				homa_rpc_lock(rpc);
+				goto error;
+			}
+			
 		}
 		else
 		{
