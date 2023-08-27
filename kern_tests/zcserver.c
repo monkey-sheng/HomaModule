@@ -171,7 +171,7 @@ server_init(void)
         memcpy(expected + _offset, msg_string, sizeof(msg_string) - 1); // don't copy the \0 for easier receive and printing on server
         _offset += sizeof(msg_string) - 1;
     }
-    memcpy(expected + _offset, msg_string, sizeof(msg_string));
+    // memcpy(expected + _offset, msg_string, sizeof(msg_string));
     pr_notice("memcmp with expected: %d\n", strcmp(recvbuf, expected));
     kfree(expected);
     ////////////////////////////////////////////////////////////////

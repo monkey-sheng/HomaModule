@@ -116,15 +116,15 @@ client_init(void)
         memcpy(page_addr1 + _offset, msg_string, sizeof(msg_string)-1); // don't copy the \0 for easier receive and printing on server
         _offset += sizeof(msg_string)-1;
     }
-    memcpy(page_addr2, msg_string, sizeof(msg_string));
+    // memcpy(page_addr2, msg_string, sizeof(msg_string));
 
     struct bio_vec bvecs[2];
     pr_info("calling bvec_set_virt()\n");
     // bvec_set_virt(&bvec, msg_string1, sizeof(msg_string1));  // stack page won't work
     bvec_set_virt(&bvecs[0], page_addr1, _nr*(sizeof(msg_string)-1));//sizeof(msg_string)-1
-    bvec_set_virt(&bvecs[1], page_addr2, sizeof(msg_string));
+    // bvec_set_virt(&bvecs[1], page_addr2, sizeof(msg_string));
     pr_info("calling iov_iter_bvec()\n");
-    iov_iter_bvec(&send_hdr.msg_iter, ITER_SOURCE, bvecs, 2, _nr*(sizeof(msg_string)-1) + sizeof(msg_string));//sizeof(msg_string)*2-1
+    iov_iter_bvec(&send_hdr.msg_iter, ITER_SOURCE, bvecs, 1, _nr*(sizeof(msg_string)-1));// + sizeof(msg_string)s
 
     // ret = kernel_sendmsg(sock, &send_hdr, &bvec, 1, sizeof(msg_string1)); /* the problem is this expects kvecs only */
     ret = sock_sendmsg(sock, &send_hdr);  // has to switch to sock_sendmsg
