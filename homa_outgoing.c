@@ -270,15 +270,16 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 				// NOTE: int bytes_left: num of bytes not processed yet for the whole msg data payload
 
 				pr_info("homa_message_out_init sendpage do while loop\n");
-				// TODO: these will get freed later by the network stack, don't free them in this func?
-				// TODO: for now, it's data_segment per page, maybe fill a page up?
-				seg = (struct data_segment*) __get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
 
 				int seg_size;
 				unsigned int curr_bvec_len = bvecs_payload[curr_bvec_n].bv_len;
 				unsigned int curr_bvec_offset_in_seg = 0;
 				while (curr_bvec_len > 0)
 				{
+					// TODO: these will get freed later by the network stack, don't free them in this func?
+					// TODO: for now, it's data_segment per page, maybe fill a page up?
+					seg = (struct data_segment *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
+					
 					seg->offset = htonl(rpc->msgout.length - bytes_left);
 					// TODO: seg_size should take into account how many bytes remaining in the bvec/page, should never go over the bvec limit
 					// however, Homa expects every packet except the last to be fully loaded, so this means a data_segment header can
