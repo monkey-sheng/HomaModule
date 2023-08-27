@@ -122,7 +122,7 @@ client_init(void)
     bvec_set_virt(&bvecs[0], page_addr1, _nr * (sizeof(msg_string) - 1)); // sizeof(msg_string)-1
     // bvec_set_virt(&bvecs[1], page_addr2, sizeof(msg_string));
     pr_info("calling iov_iter_bvec()\n");
-    iov_iter_bvec(&send_hdr.msg_iter, ITER_SOURCE, bvecs, 2, _nr * (sizeof(msg_string) - 1)); // + sizeof(msg_string)
+    iov_iter_bvec(&send_hdr.msg_iter, ITER_SOURCE, bvecs, 1, _nr * (sizeof(msg_string) - 1)); // + sizeof(msg_string)
 
     // ret = kernel_sendmsg(sock, &send_hdr, &bvec, 1, sizeof(msg_string1)); /* the problem is this expects kvecs only */
     ret = sock_sendmsg(sock, &send_hdr); // has to switch to sock_sendmsg
