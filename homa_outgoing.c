@@ -313,7 +313,7 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 			struct iov_iter new_iter;
 			iov_iter_bvec(&new_iter, ITER_SOURCE, bvecs_new, curr_bvec_new_n, bvecs_new_total_size);
 			pr_notice("bvecs_new_total_size: %ld, total final bvecs: %ld\n", bvecs_new_total_size, curr_bvec_new_n);
-			ret = skb_splice_from_iter(skb, &new_iter, curr_bvec_new_n, GFP_KERNEL); // TODO
+			ret = skb_splice_from_iter(skb, &new_iter, bvecs_new_total_size, GFP_KERNEL);
 			if (ret < 0)
 			{
 				pr_err("skb_splice_from_iter failed:, ret = %ld\n", ret);
@@ -322,7 +322,8 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 				homa_rpc_lock(rpc);
 				goto error;
 			}
-
+			else
+				pr_notice("skb_splice_from_iter ret: %d\n", ret);
 		}
 		else
 		{
