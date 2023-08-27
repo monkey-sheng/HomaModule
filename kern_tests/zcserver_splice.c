@@ -166,11 +166,10 @@ server_init(void)
     int _nr = 127;
     for (_cnt = 0; _cnt < _nr; _cnt++) // if overwritting the page, things will break badly later without warning
     {
-        // pr_notice("offset = %d\n", _offset);
         memcpy(expected + _offset, msg_string, sizeof(msg_string) - 1); // don't copy the \0 for easier receive and printing on server
         _offset += sizeof(msg_string) - 1;
     }
-    // memcpy(expected + _offset, msg_string, sizeof(msg_string));
+    memcpy(expected + _offset, msg_string, sizeof(msg_string));
     pr_notice("memcmp with expected: %d\n", strcmp(recvbuf, expected));
     kfree(expected);
     ////////////////////////////////////////////////////////////////
