@@ -157,7 +157,7 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 	// info for processing bvecs for paged skbs
 	size_t curr_bvec_n = 0; // original nth bvec of payload getting processed
 	size_t nr_segs_payload = iter->nr_segs;		// original no. of iovecs
-	struct bio_vec *bvecs_payload = iter->bvec; // iter_iov(iter); // original bvecs (holding payload data)
+	struct bio_vec *bvecs_payload = (struct bio_vec *) iter_iov(iter); // iter->bvec; // original bvecs (holding payload data)
 
 	for (bytes_left = rpc->msgout.length; bytes_left > 0; ) {
 		struct data_header *h;
@@ -253,12 +253,12 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 			/* ret = skb_splice_from_iter(skb, iter, seg_size, GFP_KERNEL); */
 			// write data_segment into pages, and put them in between actual data payload
 			ssize_t ret;
-			pr_notice("nr_segs_payload: %d, (starting) bvecs_payload: %p\n", nr_segs_payload, bvecs_payload);
+			pr_notice("nr_segs_payload: %ld, (starting) bvecs_payload: %p\n", nr_segs_payload, bvecs_payload);
 			size_t curr_bvec_new_n = 0; // ptr into bvecs_new array below
 			size_t nr_segs_left = nr_segs_payload - curr_bvec_n; // this many bvecs left to process
 			// possible max of new segs from payload, not including new data_segment
 			size_t nr_new_segs_max = (DIV_ROUND_UP(PAGE_SIZE, max_pkt_data) * nr_segs_left); // TODO: can use fewer
-			pr_notice("nr_new_segs_max: \n", nr_new_segs_max);
+			pr_notice("nr_new_segs_max: %ld\n", nr_new_segs_max);
 			struct bio_vec *bvecs_new = kmalloc_array(nr_new_segs_max * 2, sizeof(struct bio_vec), GFP_KERNEL);
 			size_t bvecs_new_total_size = 0;
 			do
@@ -280,6 +280,9 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 				while (curr_bvec_len > 0)
 				{
 					seg->offset = htonl(rpc->msgout.length - bytes_left);
+					// TODO: seg_size should take into account how many bytes remaining in the bvec/page, should never go over the bvec limit
+					// however, Homa expects every packet except the last to be fully loaded, so this means a data_segment header can
+					// be followed by more than 1 bvec (depending on mtu/packet size and bvec lengths).
 					if (bytes_left <= max_pkt_data)
 						seg_size = bytes_left;
 					else
@@ -291,34 +294,35 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 					pr_info("HOMA using zc, seg_size = %d\n", seg_size);
 
 					bvec_set_virt(&bvecs_new[curr_bvec_new_n], seg, sizeof(*seg));
-					void *curr_seg_bvec_offset = bvecs_payload[curr_bvec_n].bv_offset + curr_bvec_offset_in_seg;
-					pr_notice("curr_seg_bvec_offset: %p\n", curr_seg_bvec_offset);
-					bvec_set_virt(&bvecs_new[curr_bvec_new_n + 1], curr_seg_bvec_offset, seg_size);
+					unsigned int curr_seg_bvec_offset = bvecs_payload[curr_bvec_n].bv_offset + curr_bvec_offset_in_seg;
+					pr_notice("curr_seg_bvec_offset: %d, bvecs_payload[curr_bvec_n].bv_offset + bvecs_payload[curr_bvec_n].bv_len: %d\n", curr_seg_bvec_offset, bvecs_payload[curr_bvec_n].bv_offset + bvecs_payload[curr_bvec_n].bv_len);
+					bvec_set_page(&bvecs_new[curr_bvec_new_n + 1], bvecs_payload[curr_bvec_n].bv_page, seg_size, curr_seg_bvec_offset);
 					bvecs_new_total_size += (sizeof(*seg) + seg_size);
 					curr_bvec_offset_in_seg += seg_size;
 					curr_bvec_len -= seg_size;
 					curr_bvec_new_n += 2;
-					pr_notice("curr_bvec_new_n: %d\n", curr_bvec_new_n);
+					// TODO: each bvec corresponds to a page/frag of skb, there is a limi! break out of current loop maybe?
+					pr_notice("curr_bvec_new_n: %ld\n", curr_bvec_new_n);
 					bytes_left -= seg_size;
 					(skb_shinfo(skb)->gso_segs)++;
 					available -= seg_size;
 					homa_get_skb_info(skb)->wire_bytes += mtu - (max_pkt_data - seg_size) + HOMA_ETH_OVERHEAD;
 				}
 				curr_bvec_n++;
-			} while (/* TODO */ (available > 0) && (bytes_left > 0)); /* TODO: free *bvecs_new */
+			} while ((available > 0) && (bytes_left > 0)); /* TODO: free *bvecs_new */
 			struct iov_iter new_iter;
 			iov_iter_bvec(&new_iter, ITER_SOURCE, bvecs_new, curr_bvec_new_n, bvecs_new_total_size);
-			pr_notice("bvecs_new_total_size: %d, total final bvecs: %d\n", bvecs_new_total_size, curr_bvec_new_n);
+			pr_notice("bvecs_new_total_size: %ld, total final bvecs: %ld\n", bvecs_new_total_size, curr_bvec_new_n);
 			ret = skb_splice_from_iter(skb, &new_iter, curr_bvec_new_n, GFP_KERNEL); // TODO
 			if (ret < 0)
 			{
-				pr_err("skb_splice_from_iter failed:, ret = %d\n", ret);
+				pr_err("skb_splice_from_iter failed:, ret = %ld\n", ret);
 				err = -EFAULT;
 				kfree_skb(skb);
 				homa_rpc_lock(rpc);
 				goto error;
 			}
-			
+
 		}
 		else
 		{
