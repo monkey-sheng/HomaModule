@@ -104,7 +104,7 @@ client_init(void)
 
     
     void *page_addr1 = (void *) __get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
-    void *page_addr2 = (void *) __get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
+    // void *page_addr2 = (void *) __get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
     // write something on the page
     char msg_string[] = "this is some message on page!!!!";
     int _cnt = 0;
