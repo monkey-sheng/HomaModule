@@ -26,8 +26,10 @@ client_init(void)
     struct socket *sock;
     int ret;
     ret = sock_create_kern(current->nsproxy->net_ns, AF_INET, SOCK_DGRAM, IPPROTO_HOMA, &sock);
-    if (ret < 0)
+    if (ret < 0) {
         pr_err("%s, %d\n", "cannot create socket for homa in kernel!", ret);
+        return ret;
+    }
     else
         pr_info("%s, %d\n", "sock_create success!", ret);
 
