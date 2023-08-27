@@ -264,7 +264,8 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 			do
 			{
 				// TODO: this loop inserts corresponding struct data_segment, then splits the bvecs of the original into mtu-compat ones
-				// would be sth like: data_header---data_segment---some mtu compat payload as bvec---...(data_segment and bvec repeated)
+				// would be sth like: data_header---data_segment---some mtu compatible payload as bvecs (potentially > 1 bvec, which when all summed should not exceed the mtu size)---...(data_segment and bvec repeated)
+				// this may happen if bvecs given are smaller than mtu size, but homa packets should be mtu sized
 
 				// NOTE: int available: just the num of bytes available per skb, accounting for max_gso_size
 				// NOTE: int bytes_left: num of bytes not processed yet for the whole msg data payload
@@ -279,9 +280,9 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 					// TODO: these will get freed later by the network stack, don't free them in this func?
 					// TODO: for now, it's data_segment per page, maybe fill a page up?
 					seg = (struct data_segment *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 0);
-					
+
 					seg->offset = htonl(rpc->msgout.length - bytes_left);
-					// TODO: seg_size should take into account how many bytes remaining in the bvec/page, should never go over the bvec limit
+					// FIXME: seg_size should take into account how many bytes remaining in the bvec/page, should never go over the bvec limit
 					// however, Homa expects every packet except the last to be fully loaded, so this means a data_segment header can
 					// be followed by more than 1 bvec (depending on mtu/packet size and bvec lengths).
 					if (bytes_left <= max_pkt_data)
