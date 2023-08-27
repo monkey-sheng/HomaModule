@@ -323,7 +323,7 @@ int homa_message_out_init(struct homa_rpc *rpc, struct iov_iter *iter, int xmit,
 				goto error;
 			}
 			else
-				pr_notice("skb_splice_from_iter ret: %d\n", ret);
+				pr_notice("skb_splice_from_iter ret: %ld\n", ret);
 		}
 		else
 		{
